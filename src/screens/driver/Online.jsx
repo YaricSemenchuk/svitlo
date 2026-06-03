@@ -15,6 +15,15 @@ export default function Online() {
     if (state.status === 'requesting') nav('/driver/request')
   }, [state.status, nav])
 
+  // Після (пере)підключення WebSocket сервер «забуває» нас зі списку онлайн.
+  // Якщо тумблер увімкнено — заявляємо себе онлайн знову, інакше заявки не йдуть.
+  useEffect(() => {
+    const off = realtime.on('rt:open', () => {
+      if (accepting) realtime.emit('driver:online', { profile: state.profiles.driver })
+    })
+    return off
+  }, [realtime, accepting, state.profiles.driver])
+
   const toggle = () => {
     const next = !accepting
     setAccepting(next)

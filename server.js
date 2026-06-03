@@ -232,6 +232,23 @@ function handleWs(ws, event, p) {
     case 'driver:online':
       ws.role = 'driver'
       online.set(ws, { profile: p.profile, coord: p.coord })
+      // Віддаємо водію всі поїздки, що зараз у пошуку (створені до того, як він
+      // вийшов онлайн, або до переподключення його сокета). Без цього одноразова
+      // розсилка ride:request «губиться» — водій не бачить активне замовлення.
+      for (const ride of rides.values()) {
+        if (ride.status === 'searching' && !ride.driver) {
+          send(ws, 'ride:request', {
+            rideId: ride.id,
+            rider: ride.riderProfile || { name: 'Пасажир' },
+            fare: ride.fare,
+            fromLabel: ride.from,
+            toLabel: ride.to,
+            pickup: ride.pickupCoord,
+            dest: ride.destCoord,
+            driverStart: ride.driverStartCoord,
+          })
+        }
+      }
       break
 
     case 'driver:offline':
