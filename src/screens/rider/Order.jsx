@@ -5,6 +5,7 @@ import { useTrip } from '../../state/TripContext'
 import LiveMap from '../../components/LiveMap'
 import AddressField from '../../components/AddressField'
 import { PLACES, KYIV_CENTER, reverseGeocode, nearbyStart, fetchRouteInfo } from '../../lib/maps'
+import { ensurePushSubscription } from '../../lib/push'
 import { TopBar, Sheet, BarHead, Metric, Metrics, Chip, Btn } from '../../components/ui'
 
 const MIN_FARE = 60
@@ -105,6 +106,9 @@ export default function Order() {
     const pickupCoord = state.fromCoord || PLACES.pickup
     const destCoord = state.toCoord || PLACES.dest
     const driverStartCoord = nearbyStart(pickupCoord)
+
+    // Підписка на пуш «Водій прибув» (із жесту тапу — дозвіл показується тут).
+    ensurePushSubscription()
 
     dispatch({ type: 'SET_FARE', fare: finalFare })
     dispatch({ type: 'CREATE_RIDE', fare: finalFare, pickupCoord, destCoord, driverStartCoord })

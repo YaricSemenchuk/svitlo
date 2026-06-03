@@ -4,6 +4,7 @@ import express from 'express'
 import pg from 'pg'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
+import webpush from 'web-push'
 import path from 'path'
 import http from 'http'
 import { WebSocketServer } from 'ws'
@@ -30,6 +31,37 @@ async function initDb() {
       created_at TIMESTAMPTZ DEFAULT now()
     )
   `)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS push_subs (
+      user_id INTEGER PRIMARY KEY,
+      subscription JSONB NOT NULL,
+      updated_at TIMESTAMPTZ DEFAULT now()
+    )
+  `)
+}
+
+// Web Push (VAPID). Якщо ключі не задані — пуші просто вимкнені.
+const PUSH_ON = !!(process.env.VAPID_PUBLIC && process.env.VAPID_PRIVATE)
+if (PUSH_ON) {
+  webpush.setVapidDetails(
+    process.env.VAPID_SUBJECT || 'mailto:support@svitlo.app',
+    process.env.VAPID_PUBLIC,
+    process.env.VAPID_PRIVATE
+  )
+}
+
+// Надіслати пуш користувачу (за user_id). Чистить мертві підписки.
+async function pushToUser(userId, payload) {
+  if (!PUSH_ON || !userId) return
+  try {
+    const r = await pool.query('SELECT subscription FROM push_subs WHERE user_id=$1', [userId])
+    if (!r.rowCount) return
+    await webpush.sendNotification(r.rows[0].subscription, JSON.stringify(payload))
+  } catch (e) {
+    if (e.statusCode === 404 || e.statusCode === 410) {
+      await pool.query('DELETE FROM push_subs WHERE user_id=$1', [userId]).catch(() => {})
+    }
+  }
 }
 
 const app = express()
@@ -119,7 +151,22 @@ app.put('/api/profile', auth, async (req, res) => {
   res.json({ user: publicUser(r.rows[0]) })
 })
 
-app.get('/api/health', (req, res) => res.json({ ok: true }))
+// Публічний VAPID-ключ для підписки на клієнті.
+app.get('/api/push/vapid', (req, res) => res.json({ publicKey: process.env.VAPID_PUBLIC || null }))
+
+// Зберегти підписку на пуші для поточного користувача.
+app.post('/api/push/subscribe', auth, async (req, res) => {
+  const sub = req.body.subscription
+  if (!sub) return res.status(400).json({ error: 'no subscription' })
+  await pool.query(
+    `INSERT INTO push_subs (user_id, subscription) VALUES ($1,$2)
+     ON CONFLICT (user_id) DO UPDATE SET subscription=$2, updated_at=now()`,
+    [req.user.id, sub]
+  )
+  res.json({ ok: true })
+})
+
+app.get('/api/health', (req, res) => res.json({ ok: true, push: PUSH_ON }))
 
 // Статика фронту + SPA-fallback.
 const dist = path.join(__dirname, 'dist')
@@ -164,11 +211,17 @@ wss.on('connection', (ws, req) => {
 
   ws.on('close', () => {
     online.delete(ws)
+    // Розрив звʼязку може бути просто оновленням сторінки (refresh).
+    // Не вбиваємо поїздку одразу — даємо 60 c на переподключення (ride:resume).
     for (const ride of rides.values()) {
-      if (ride.driver === ws) send(ride.passenger, 'ride:cancel', { rideId: ride.id, by: 'driver' })
-      else if (ride.passenger === ws) {
-        if (ride.driver) send(ride.driver, 'ride:cancel', { rideId: ride.id, by: 'rider' })
-        rides.delete(ride.id)
+      if (ride.driver === ws) ride.driver = null
+      if (ride.passenger === ws) ride.passenger = null
+      if ((ride.driver === null || ride.passenger === null) && !ride.graceTimer) {
+        ride.graceTimer = setTimeout(() => {
+          send(ride.passenger, 'ride:cancel', { rideId: ride.id })
+          send(ride.driver, 'ride:cancel', { rideId: ride.id })
+          rides.delete(ride.id)
+        }, 60000)
       }
     }
   })
@@ -185,11 +238,33 @@ function handleWs(ws, event, p) {
       online.delete(ws)
       break
 
+    case 'ride:resume': {
+      // Клієнт повернувся після refresh — переприлінковуємо сокет до поїздки.
+      const ride = rides.get(p.rideId)
+      if (!ride) {
+        send(ws, 'ride:gone', { rideId: p.rideId })
+        return
+      }
+      if (p.role === 'driver') ride.driver = ws
+      else {
+        ride.passenger = ws
+        ride.passengerUserId = ws.userId
+      }
+      ws.rideId = ride.id
+      if (ride.graceTimer) {
+        clearTimeout(ride.graceTimer)
+        ride.graceTimer = null
+      }
+      send(ws, 'ride:resumed', { rideId: ride.id, status: ride.status })
+      break
+    }
+
     case 'ride:create': {
       const id = 'r' + rideSeq++
       const ride = {
         id,
         passenger: ws,
+        passengerUserId: ws.userId,
         riderProfile: p.profile,
         from: p.from,
         to: p.to,
@@ -257,6 +332,16 @@ function handleWs(ws, event, p) {
       if (ride) {
         ride.status = p.status
         send(ride.passenger, 'ride:status', { status: p.status })
+        // Пуш замовнику — спрацює навіть якщо вкладку згорнуто.
+        if (p.status === 'arrived') {
+          const dn = ride.driverProfile?.name || 'Водій'
+          const plate = ride.driverProfile?.plate ? ` · ${ride.driverProfile.plate}` : ''
+          pushToUser(ride.passengerUserId, {
+            title: 'Водій прибув 🚕',
+            body: `${dn}${plate} чекає на вас за адресою: ${ride.from || 'точка подачі'}`,
+            url: '/rider/enroute',
+          })
+        }
       }
       break
     }

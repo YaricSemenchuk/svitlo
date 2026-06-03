@@ -36,3 +36,6 @@ export const apiLogin = (payload) => call('/login', { method: 'POST', body: payl
 export const apiMe = (token) => call('/me', { token })
 export const apiUpdateProfile = (token, role, profile) =>
   call('/profile', { method: 'PUT', token, body: { role, profile } })
+export const apiVapid = () => call('/push/vapid')
+export const apiSubscribePush = (token, subscription) =>
+  call('/push/subscribe', { method: 'POST', token, body: { subscription } })

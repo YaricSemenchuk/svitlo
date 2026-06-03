@@ -47,7 +47,10 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff,woff2}'],
+        // Обробник пуш-сповіщень у service worker.
+        importScripts: ['/push-handler.js'],
         navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/api/, /^\/ws/],
         runtimeCaching: [
           {
             // Векторні тайли карти (CARTO) — свіжі дані важливіші за кеш.

@@ -13,6 +13,7 @@ export default function RiderTrip() {
   // Поїздку завершує водій → status 'completed' → чек.
   useEffect(() => {
     if (state.status === 'completed') nav('/rider/complete')
+    else if (state.status === 'idle') nav('/rider/order')
   }, [state.status, nav])
 
   // Прогрес/відстань — за реальною позицією авто (driver:location).

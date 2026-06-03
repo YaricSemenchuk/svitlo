@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Phone, MessageSquare, Share2 } from 'lucide-react'
 import { useTrip } from '../../state/TripContext'
@@ -9,6 +10,11 @@ export default function EnRoute() {
   const nav = useNavigate()
   const { state, realtime, dispatch } = useTrip()
   const d = state.driver
+
+  // Немає активної поїздки (втрачена/скинута) → на замовлення.
+  useEffect(() => {
+    if (state.status === 'idle') nav('/rider/order')
+  }, [state.status, nav])
 
   // Дистанція подачі на основі реальних координат маршруту.
   const TOTAL = Math.max(1, haversine(state.driverStartCoord, state.pickupCoord)) // м

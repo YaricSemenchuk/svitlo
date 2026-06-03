@@ -41,6 +41,7 @@ export function createRealtime() {
     }
     ws.onopen = () => {
       while (queue.length) ws.send(queue.shift())
+      fire('rt:open')
     }
     ws.onmessage = (e) => {
       let msg
@@ -52,7 +53,11 @@ export function createRealtime() {
       const { event, payload } = msg
       // Запамʼятовуємо rideId з ключових подій.
       if (payload?.rideId) {
-        if (['ride:created', 'ride:assigned', 'ride:matched', 'ride:request'].includes(event))
+        if (
+          ['ride:created', 'ride:assigned', 'ride:matched', 'ride:request', 'ride:resumed'].includes(
+            event
+          )
+        )
           rideId = payload.rideId
       }
       fire(event, payload)

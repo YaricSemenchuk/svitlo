@@ -11,6 +11,8 @@ export function useDriverTracking({ enabled = true } = {}) {
   const { realtime } = useTrip()
   const [permission, setPermission] = useState('unknown') // unknown | granted | denied
   const [speed, setSpeed] = useState(0) // km/h
+  const [coord, setCoord] = useState(null) // [lng,lat] реальна позиція
+  const [heading, setHeading] = useState(0)
 
   useEffect(() => {
     if (!enabled) return
@@ -42,15 +44,16 @@ export function useDriverTracking({ enabled = true } = {}) {
         (pos) => {
           if (cancelled) return
           setPermission('granted')
-          const { longitude, latitude, speed: spd, heading } = pos.coords
+          const { longitude, latitude, speed: spd, heading: hd } = pos.coords
           if (typeof spd === 'number' && !Number.isNaN(spd)) {
             setSpeed(Math.max(0, Math.round(spd * 3.6)))
           }
-          // Реальні координати → realtime (у проді: на сервер).
-          realtime.emit('driver:location', {
-            coord: [longitude, latitude],
-            heading: heading ?? 0,
-          })
+          const c = [longitude, latitude]
+          const h = hd ?? 0
+          setCoord(c)
+          setHeading(h)
+          // Реальні координати → realtime (сервер ретранслює замовнику).
+          realtime.emit('driver:location', { coord: c, heading: h })
         },
         (err) => {
           if (err.code === err.PERMISSION_DENIED) setPermission('denied')
@@ -67,5 +70,5 @@ export function useDriverTracking({ enabled = true } = {}) {
     }
   }, [enabled, realtime])
 
-  return { permission, speed }
+  return { permission, speed, coord, heading }
 }

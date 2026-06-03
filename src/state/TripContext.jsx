@@ -15,6 +15,46 @@ function loadProfiles() {
   }
 }
 
+// ── Сесія активної поїздки зберігається в sessionStorage,
+//    щоб переживати оновлення сторінки (refresh) ──
+const RIDE_KEY = 'svitlo.ride'
+const RIDE_FIELDS = [
+  'role',
+  'status',
+  'rideId',
+  'from',
+  'to',
+  'fare',
+  'pickupCoord',
+  'destCoord',
+  'driverStartCoord',
+  'carCoord',
+  'carHeading',
+  'driver',
+  'rider',
+]
+function loadRide() {
+  try {
+    const r = JSON.parse(sessionStorage.getItem(RIDE_KEY))
+    return r && r.status && r.status !== 'idle' ? r : null
+  } catch {
+    return null
+  }
+}
+function saveRide(state) {
+  try {
+    if (!state.rideId || state.status === 'idle') {
+      sessionStorage.removeItem(RIDE_KEY)
+      return
+    }
+    const snap = {}
+    RIDE_FIELDS.forEach((k) => (snap[k] = state[k]))
+    sessionStorage.setItem(RIDE_KEY, JSON.stringify(snap))
+  } catch {
+    /* ignore */
+  }
+}
+
 // Стани поїздки:
 // idle → requesting → matching → assigned → arriving → arrived → in_trip → completed
 const initialState = {
@@ -214,11 +254,16 @@ export function TripProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, initialState, (init) => ({
     ...init,
     profiles: loadProfiles(),
+    ...(loadRide() || {}), // відновлюємо активну поїздку після refresh
   }))
   const rtRef = useRef(null)
 
   if (!rtRef.current) rtRef.current = createRealtime()
   const realtime = rtRef.current
+
+  // Дзеркало сесії для обробника reconnect (щоб не залежати від замикання).
+  const sessionRef = useRef({ rideId: null, role: null, status: 'idle' })
+  sessionRef.current = { rideId: state.rideId, role: state.role, status: state.status }
 
   // Зберігаємо профілі в localStorage (кеш на випадок офлайну).
   useEffect(() => {
@@ -228,6 +273,19 @@ export function TripProvider({ children }) {
       /* ignore */
     }
   }, [state.profiles])
+
+  // Зберігаємо сесію активної поїздки (переживає refresh).
+  useEffect(() => {
+    saveRide(state)
+  }, [
+    state.status,
+    state.rideId,
+    state.carCoord,
+    state.driver,
+    state.rider,
+    state.pickupCoord,
+    state.destCoord,
+  ])
 
   // На старті, якщо є токен — підтягуємо профілі з сервера (джерело правди).
   useEffect(() => {
@@ -244,6 +302,16 @@ export function TripProvider({ children }) {
   useEffect(() => {
     realtime.connect()
     const offs = [
+      // WebSocket (пере)підключився — відновлюємо активну поїздку на сервері.
+      realtime.on('rt:open', () => {
+        const s = sessionRef.current
+        if (s.rideId && s.status !== 'idle' && s.status !== 'completed') {
+          realtime.emit('ride:resume', { rideId: s.rideId, role: s.role })
+        }
+      }),
+      // Поїздку на сервері втрачено (напр. сервер перезапустився) → скидаємо.
+      realtime.on('ride:gone', () => dispatch({ type: 'RESET' })),
+      realtime.on('ride:resumed', () => {}),
       // Замовник створив поїздку.
       realtime.on('ride:created', (p) =>
         dispatch({ type: 'SET_RIDE_META', rideId: p.rideId, driversOnline: p.driversOnline })

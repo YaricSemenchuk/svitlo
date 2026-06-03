@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useTrip } from '../../state/TripContext'
 import { useDriverTracking } from '../../lib/useDriverTracking'
 import LiveMap from '../../components/LiveMap'
-import { PLACES } from '../../lib/maps'
+import { haversine } from '../../lib/maps'
 import { TopBar, Sheet, BarHead, NavBanner, Avatar, Btn } from '../../components/ui'
 
 function banner(p, km) {
@@ -16,11 +16,17 @@ function banner(p, km) {
 export default function Navigate() {
   const nav = useNavigate()
   const { state, realtime } = useTrip()
-  const { permission, speed } = useDriverTracking({ enabled: true })
+  const { permission, speed, coord, heading } = useDriverTracking({ enabled: true })
   const [info, setInfo] = useState({ p: 0, km: 1.2 })
   const [atPlace, setAtPlace] = useState(false)
 
   const onProgress = (p, i) => setInfo({ p, km: i.km })
+
+  // Якщо є реальний GPS — карта показує мою позицію (controlled);
+  // інакше демо-анімація по дорогах (для тесту без GPS).
+  const hasGps = !!coord
+  const total = Math.max(1, haversine(state.driverStartCoord, state.pickupCoord))
+  const gpsRemaining = hasGps ? haversine(coord, state.pickupCoord) : null
 
   // «Я на місці» → повідомляємо замовника. Чекаємо, поки він почне поїздку.
   const arrive = () => {
@@ -29,13 +35,16 @@ export default function Navigate() {
   }
 
   // Пасажир підтвердив посадку (ride:start → status 'in_trip') → у дорогу.
+  // Поїздку втрачено/скасовано → назад онлайн.
   useEffect(() => {
     if (state.status === 'in_trip') nav('/driver/trip')
+    else if (state.status === 'idle') nav('/driver/online')
   }, [state.status, nav])
 
-  const km = info.km
+  const km = hasGps ? gpsRemaining / 1000 : info.km
+  const p = hasGps ? 1 - Math.min(1, gpsRemaining / total) : info.p
   const mins = Math.max(1, Math.round(km * 3))
-  const b = banner(info.p, km)
+  const b = banner(p, km)
 
   return (
     <div className="screen">
@@ -44,7 +53,8 @@ export default function Navigate() {
         start={state.driverStartCoord}
         pickup={state.pickupCoord}
         durationMs={16000}
-        onProgress={onProgress}
+        onProgress={hasGps ? undefined : onProgress}
+        car={hasGps ? { coord, heading } : null}
       />
 
       <div className="float-top">
