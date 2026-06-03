@@ -168,7 +168,18 @@ app.post('/api/push/subscribe', auth, async (req, res) => {
   res.json({ ok: true })
 })
 
-app.get('/api/health', (req, res) => res.json({ ok: true, push: PUSH_ON }))
+app.get('/api/health', async (req, res) => {
+  // redis: 'off' (не налаштовано) | 'ready' (PING успішний) | 'down' (помилка)
+  let redis = 'off'
+  if (redisOn) {
+    try {
+      redis = (await pub.ping()) === 'PONG' ? 'ready' : 'down'
+    } catch {
+      redis = 'down'
+    }
+  }
+  res.json({ ok: true, push: PUSH_ON, redis })
+})
 
 // Статика фронту + SPA-fallback.
 const dist = path.join(__dirname, 'dist')
