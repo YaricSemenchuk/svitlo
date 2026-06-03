@@ -188,6 +188,16 @@ const send = (ws, event, payload) => {
   if (ws && ws.readyState === 1) ws.send(JSON.stringify({ event, payload }))
 }
 
+// Кількість онлайн-водіїв змінилась → оновлюємо лічильник у замовників,
+// що зараз у пошуку (інакше «0 водіїв» залипає, якщо водій вийшов пізніше).
+function broadcastDriverCount() {
+  const count = online.size
+  for (const ride of rides.values()) {
+    if (ride.status === 'searching' && ride.passenger)
+      send(ride.passenger, 'drivers:count', { driversOnline: count })
+  }
+}
+
 wss.on('connection', (ws, req) => {
   try {
     const token = new URL(req.url, 'http://x').searchParams.get('token')
@@ -210,7 +220,8 @@ wss.on('connection', (ws, req) => {
   })
 
   ws.on('close', () => {
-    online.delete(ws)
+    const wasOnline = online.delete(ws)
+    if (wasOnline) broadcastDriverCount()
     // Розрив звʼязку може бути просто оновленням сторінки (refresh).
     // Не вбиваємо поїздку одразу — даємо 60 c на переподключення (ride:resume).
     for (const ride of rides.values()) {
@@ -249,10 +260,12 @@ function handleWs(ws, event, p) {
           })
         }
       }
+      broadcastDriverCount()
       break
 
     case 'driver:offline':
       online.delete(ws)
+      broadcastDriverCount()
       break
 
     case 'ride:resume': {

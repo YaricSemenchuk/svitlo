@@ -157,6 +157,9 @@ function reducer(state, action) {
     case 'SET_RIDE_META':
       return { ...state, rideId: action.rideId, driversOnline: action.driversOnline ?? 0 }
 
+    case 'SET_DRIVERS_ONLINE':
+      return { ...state, driversOnline: action.driversOnline ?? 0 }
+
     case 'ASSIGNED':
       // Водій отримав поїздку: координати маршруту + дані замовника.
       return {
@@ -315,6 +318,10 @@ export function TripProvider({ children }) {
       // Замовник створив поїздку.
       realtime.on('ride:created', (p) =>
         dispatch({ type: 'SET_RIDE_META', rideId: p.rideId, driversOnline: p.driversOnline })
+      ),
+      // Лічильник онлайн-водіїв оновився під час пошуку.
+      realtime.on('drivers:count', (p) =>
+        dispatch({ type: 'SET_DRIVERS_ONLINE', driversOnline: p.driversOnline })
       ),
       // Замовнику: водія знайдено.
       realtime.on('ride:matched', (p) => dispatch({ type: 'MATCHED', driver: p.driver })),
