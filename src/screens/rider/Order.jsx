@@ -4,7 +4,7 @@ import { Minus, Plus } from 'lucide-react'
 import { useTrip } from '../../state/TripContext'
 import LiveMap from '../../components/LiveMap'
 import AddressField from '../../components/AddressField'
-import { PLACES, KYIV_CENTER, reverseGeocode } from '../../lib/maps'
+import { PLACES, KYIV_CENTER, reverseGeocode, nearbyStart } from '../../lib/maps'
 import { TopBar, Sheet, BarHead, Metric, Metrics, Chip, Btn } from '../../components/ui'
 
 const RECOMMENDED = 248 // рекомендована ціна — орієнтир для підказки
@@ -60,15 +60,29 @@ export default function Order() {
 
   const order = () => {
     const finalFare = Math.max(MIN_FARE, state.fare || base)
+    // Резолвимо координати маршруту з обраних адрес (або демо-фолбек).
+    const pickupCoord = state.fromCoord || PLACES.pickup
+    const destCoord = state.toCoord || PLACES.dest
+    const driverStartCoord = nearbyStart(pickupCoord)
+
+    // Кандидати-водії — ЛИШЕ реальні (зареєстрований/онлайн на цьому пристрої).
+    // Жодних вигаданих. Немає водія — пасажир побачить «немає вільних поблизу».
+    const drivers = state.profiles.driver
+      ? [{ ...state.profiles.driver, startCoord: driverStartCoord }]
+      : []
+
     dispatch({ type: 'SET_FARE', fare: finalFare })
-    dispatch({ type: 'CREATE_RIDE', fare: finalFare })
+    dispatch({ type: 'CREATE_RIDE', fare: finalFare, pickupCoord, destCoord, driverStartCoord })
     realtime.emit('ride:create', {
       from: state.from,
       to: state.to,
       fromCoord: state.fromCoord,
       toCoord: state.toCoord,
+      pickupCoord,
+      destCoord,
+      driverStartCoord,
       fare: finalFare,
-      driverProfile: state.profiles.driver, // зареєстрований водій відгукнеться першим
+      drivers,
     })
     nav('/rider/matching')
   }

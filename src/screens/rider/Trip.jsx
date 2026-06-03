@@ -31,14 +31,14 @@ export default function RiderTrip() {
     <div className="screen">
       <LiveMap
         role="rider"
-        start={PLACES.pickup}
-        dest={PLACES.dest}
+        start={state.pickupCoord}
+        dest={state.destCoord}
         durationMs={26000}
         onProgress={onProgress}
       />
 
       <div className="float-top">
-        <TopBar left="● У ДОРОЗІ → BORYSPIL" right={`ETA ${minsLeft} min`} />
+        <TopBar left={`● У ДОРОЗІ → ${state.to}`} right={`ETA ${minsLeft} min`} />
       </div>
 
       <div className="float-bottom">

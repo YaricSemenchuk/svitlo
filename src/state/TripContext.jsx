@@ -23,6 +23,10 @@ const initialState = {
   to: 'Аеропорт «Бориспіль»',
   fromCoord: null, // [lng,lat] обраної адреси подачі
   toCoord: null, // [lng,lat] обраної адреси призначення
+  // Резолвлені координати поточної поїздки (з обраних адрес або демо-фолбек):
+  pickupCoord: PLACES.pickup,
+  destCoord: PLACES.dest,
+  driverStartCoord: PLACES.driverStart,
   rideClass: 'comfort', // economy | comfort | business
   prefs: { silent: true, baggage: false, noSmoke: true },
   fare: 248,
@@ -72,15 +76,22 @@ function reducer(state, action) {
         prefs: { ...state.prefs, [action.key]: !state.prefs[action.key] },
       }
 
-    case 'CREATE_RIDE':
+    case 'CREATE_RIDE': {
+      const pickupCoord = action.pickupCoord || PLACES.pickup
+      const destCoord = action.destCoord || PLACES.dest
+      const driverStartCoord = action.driverStartCoord || PLACES.driverStart
       return {
         ...state,
         status: 'matching',
         fare: action.fare ?? state.fare,
         offers: [],
         driver: null,
-        carCoord: PLACES.driverStart,
+        pickupCoord,
+        destCoord,
+        driverStartCoord,
+        carCoord: driverStartCoord,
       }
+    }
 
     case 'RECEIVE_OFFER':
       return { ...state, offers: [...state.offers, action.offer] }
@@ -93,7 +104,7 @@ function reducer(state, action) {
         driver: action.driver,
         fare: action.driver.price ?? state.fare,
         offers: [],
-        carCoord: PLACES.driverStart,
+        carCoord: action.driver.startCoord || state.driverStartCoord,
       }
 
     case 'MATCHED':
@@ -124,6 +135,11 @@ function reducer(state, action) {
         // Адреси з пропозиції пасажира (фолбек — демо-маршрут).
         from: action.from || 'вул. Хрещатик, 22',
         to: action.to || 'Аеропорт «Бориспіль»',
+        // Реальні координати маршруту.
+        pickupCoord: action.pickupCoord || PLACES.pickup,
+        destCoord: action.destCoord || PLACES.dest,
+        driverStartCoord: action.driverStartCoord || PLACES.driverStart,
+        carCoord: action.driverStartCoord || PLACES.driverStart,
       }
 
     case 'ACCEPT_REQUEST':
@@ -183,8 +199,9 @@ export function TripProvider({ children }) {
           fare: p.fare,
           from: p.fromLabel,
           to: p.toLabel,
-          pickup: p.pickup,
-          dest: p.dest,
+          pickupCoord: p.pickup,
+          destCoord: p.dest,
+          driverStartCoord: p.driverStart,
         })
       ),
     ]

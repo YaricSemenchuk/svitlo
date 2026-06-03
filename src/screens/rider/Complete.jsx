@@ -18,7 +18,12 @@ export default function Complete() {
   return (
     <div className="screen">
       {/* Статична карта прибуття: маркер у точці призначення. */}
-      <LiveMap role="rider" start={PLACES.dest} pickup={PLACES.dest} car={{ coord: PLACES.dest, heading: 0 }} />
+      <LiveMap
+        role="rider"
+        start={state.destCoord}
+        pickup={state.destCoord}
+        car={{ coord: state.destCoord, heading: 0 }}
+      />
 
       <div className="float-top">
         <TopBar left="✓ ЗАВЕРШЕНО" right="22:14" />

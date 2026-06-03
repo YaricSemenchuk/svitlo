@@ -9,7 +9,7 @@
 //   emit(event, payload) => ws.send(JSON.stringify({ event, payload }))
 // Екрани й TripContext чіпати НЕ треба.
 
-import { fetchRoute, cumulative, pointAt, PLACES } from './maps'
+import { fetchRoute, cumulative, pointAt, haversine, PLACES } from './maps'
 
 export function createRealtime() {
   const listeners = new Map() // event -> Set<cb>
@@ -95,35 +95,33 @@ export function createRealtime() {
         clearTimers()
         cancelDrive()
 
-        // Аукціон: кілька водіїв відгукуються на пропозицію пасажира.
-        // delta = 0 — згоден на вашу ціну; delta > 0 — контрпропозиція.
+        // БЕЗ вигаданих водіїв. Оффер дають лише РЕАЛЬНІ водії — ті, що
+        // зареєстровані / в мережі (payload.drivers). На цьому пристрої це
+        // зареєстрований/онлайн водій. Немає таких — немає офферів.
         const offered = lastRide?.fare ?? 210
-        const TEMPLATES = [
-          { name: 'Олександр К.', initials: 'ОК', rating: 4.9, trips: 1240, car: 'Škoda Octavia', color: 'сірий', plate: 'АА 7421 ВС', phone: '+380 67 401 22 18', etaMin: 3, km: 1.2, delta: 0 },
-          { name: 'Дмитро В.', initials: 'ДВ', rating: 4.8, trips: 870, car: 'VW Passat', color: 'білий', plate: 'АІ 3092 ОР', phone: '+380 50 318 77 04', etaMin: 2, km: 0.8, delta: 25 },
-          { name: 'Ірина М.', initials: 'ІМ', rating: 4.97, trips: 2310, car: 'Toyota Camry', color: 'чорний', plate: 'КА 5510 ІК', phone: '+380 63 920 55 61', etaMin: 6, km: 2.4, delta: 50 },
-          { name: 'Сергій П.', initials: 'СП', rating: 4.85, trips: 560, car: 'Hyundai Accent', color: 'синій', plate: 'АА 1180 ВН', phone: '+380 98 144 30 96', etaMin: 8, km: 3.6, delta: 0 },
-        ]
-        // Якщо на пристрої зареєстрований водій — він відгукується першим
-        // (за вашою ціною), щоб пасажир бачив його реальні дані: авто, номер, телефон.
-        const list = [...TEMPLATES]
-        if (lastRide?.driverProfile?.name) {
-          list.unshift({ ...lastRide.driverProfile, delta: 0 })
-        }
-        list.forEach((tpl, i) => {
-          later(1200 + i * 1100, () => {
-            const { delta = 0, ...driver } = tpl
+        const pickupCoord = lastRide?.pickupCoord || PLACES.pickup
+        const drivers = (lastRide?.drivers || []).filter((d) => d?.name)
+
+        drivers.forEach((d, i) => {
+          later(1200 + i * 900, () => {
+            // ETA та дистанція рахуються від позиції водія до точки подачі.
+            const start = d.startCoord || PLACES.driverStart
+            const km = +(haversine(start, pickupCoord) / 1000).toFixed(1)
+            const etaMin = Math.max(1, Math.round(km / 0.45)) // ~27 км/год у місті
             fire('ride:offer', {
-              driver: { ...driver, price: Math.max(60, offered + delta), delta },
+              driver: { ...d, price: Math.max(60, offered), delta: 0, km, etaMin },
             })
           })
         })
       }
 
       if (event === 'ride:select') {
-        // Пасажир обрав водія з офферів → водій виїхав до точки подачі.
+        // Пасажир обрав водія з офферів → водій виїхав до точки подачі
+        // по РЕАЛЬНОМУ маршруту (координати з пропозиції).
         clearTimers() // більше не приймаємо нові оффери
-        driveAlong(PLACES.driverStart, PLACES.pickup, { onArriveStatus: true })
+        const start = payload?.driver?.startCoord || lastRide?.driverStartCoord || PLACES.driverStart
+        const pickup = lastRide?.pickupCoord || PLACES.pickup
+        driveAlong(start, pickup, { onArriveStatus: true })
       }
 
       if (event === 'ride:accept') {
@@ -146,9 +144,11 @@ export function createRealtime() {
         later(4000, () => {
           fire('ride:request', {
             rider,
-            pickup: PLACES.pickup,
-            dest: PLACES.dest,
-            // Ціна й адреси з пропозиції пасажира (фолбек — демо-значення).
+            // Реальні координати маршруту з пропозиції пасажира (фолбек — демо).
+            pickup: lastRide?.pickupCoord || PLACES.pickup,
+            dest: lastRide?.destCoord || PLACES.dest,
+            driverStart: lastRide?.driverStartCoord || PLACES.driverStart,
+            // Ціна й адреси з пропозиції пасажира.
             fare: lastRide?.fare ?? 210,
             fromLabel: lastRide?.from,
             toLabel: lastRide?.to,

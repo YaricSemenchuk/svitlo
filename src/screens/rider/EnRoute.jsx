@@ -2,20 +2,20 @@ import { useNavigate } from 'react-router-dom'
 import { Phone, MessageSquare, Share2 } from 'lucide-react'
 import { useTrip } from '../../state/TripContext'
 import LiveMap from '../../components/LiveMap'
-import { PLACES, haversine } from '../../lib/maps'
+import { haversine } from '../../lib/maps'
 import { TopBar, Sheet, BarHead, Avatar, Btn, Progress, Plate } from '../../components/ui'
-
-const TOTAL = haversine(PLACES.driverStart, PLACES.pickup) // м, повна дистанція подачі
 
 export default function EnRoute() {
   const nav = useNavigate()
   const { state, realtime, dispatch } = useTrip()
   const d = state.driver
 
-  const remaining = haversine(state.carCoord, PLACES.pickup) // м
+  // Дистанція подачі на основі реальних координат маршруту.
+  const TOTAL = Math.max(1, haversine(state.driverStartCoord, state.pickupCoord)) // м
+  const remaining = haversine(state.carCoord, state.pickupCoord) // м
   const km = remaining / 1000
-  const mins = Math.max(1, Math.round((remaining / TOTAL) * 4)) // ~4 хв повний шлях
-  const etaSec = Math.max(0, Math.round((remaining / TOTAL) * 240))
+  const mins = Math.max(1, Math.round((remaining / TOTAL) * (d?.etaMin || 4)))
+  const etaSec = Math.max(0, Math.round((remaining / TOTAL) * (d?.etaMin || 4) * 60))
   const etaMM = String(Math.floor(etaSec / 60)).padStart(2, '0')
   const etaSS = String(etaSec % 60).padStart(2, '0')
   const progress = 1 - Math.min(1, remaining / TOTAL)
@@ -36,8 +36,8 @@ export default function EnRoute() {
     <div className="screen">
       <LiveMap
         role="rider"
-        start={PLACES.driverStart}
-        pickup={PLACES.pickup}
+        start={state.driverStartCoord}
+        pickup={state.pickupCoord}
         car={{ coord: state.carCoord, heading: state.carHeading }}
       />
 
@@ -47,7 +47,7 @@ export default function EnRoute() {
 
       <div className="float-bottom">
         <Sheet>
-          <BarHead left="PICKUP · вул. Хрещатик, 22" right="SURGE ×1.0" />
+          <BarHead left={`PICKUP · ${state.from}`} right="SURGE ×1.0" />
 
           {!arrived ? (
             <div>

@@ -36,10 +36,13 @@ export default function Matching() {
   const mm = String(Math.floor(t / 60))
   const ss = String(t % 60).padStart(2, '0')
 
+  // Жодних офферів за розумний час → поблизу немає вільних водіїв.
+  const noDrivers = offers.length === 0 && t >= 6
+
   return (
     <div className="screen">
-      <LiveMap role="rider" start={PLACES.pickup} pickup={PLACES.driverStart} />
-      {offers.length === 0 && (
+      <LiveMap role="rider" start={state.pickupCoord} pickup={state.driverStartCoord} />
+      {offers.length === 0 && !noDrivers && (
         <div className="radar">
           <span />
         </div>
@@ -60,15 +63,25 @@ export default function Matching() {
           />
 
           {offers.length === 0 ? (
-            <>
-              <div className="tag">// очікуємо пропозиції водіїв…</div>
-              <div className="log">
-                <div>{'> scan radius 2.0 km'}</div>
-                <div>{'> надіслано вашу ціну ' + state.fare + ' ₴'}</div>
-                <div className="hl">{'> awaiting offers_'}</div>
-              </div>
-              <Progress value={Math.min(0.9, t / 5)} />
-            </>
+            noDrivers ? (
+              <>
+                <div className="tag">// поблизу немає вільних водіїв</div>
+                <div className="log">
+                  <div>{'> онлайн-водіїв за вашою ціною: 0'}</div>
+                  <div className="hl">{'> підвищіть ціну або спробуйте пізніше'}</div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="tag">// очікуємо пропозиції водіїв…</div>
+                <div className="log">
+                  <div>{'> пошук онлайн-водіїв поблизу'}</div>
+                  <div>{'> надіслано вашу ціну ' + state.fare + ' ₴'}</div>
+                  <div className="hl">{'> awaiting offers_'}</div>
+                </div>
+                <Progress value={Math.min(0.9, t / 5)} />
+              </>
+            )
           ) : (
             <div className="offers">
               {offers.map((o, i) => {

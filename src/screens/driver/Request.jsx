@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Phone } from 'lucide-react'
 import { useTrip } from '../../state/TripContext'
 import LiveMap from '../../components/LiveMap'
-import { PLACES } from '../../lib/maps'
+import { haversine } from '../../lib/maps'
 import { TopBar, Avatar, Row, Chip, Btn, TimerRing } from '../../components/ui'
 
 export default function Request() {
@@ -12,6 +12,11 @@ export default function Request() {
   const r = state.rider
   const [left, setLeft] = useState(12)
   const decided = useRef(false)
+
+  // Реальні дистанції з координат маршруту.
+  const pickupKm = (haversine(state.driverStartCoord, state.pickupCoord) / 1000).toFixed(1)
+  const pickupMin = Math.max(1, Math.round(pickupKm / 0.45))
+  const tripKm = (haversine(state.pickupCoord, state.destCoord) / 1000).toFixed(1)
 
   const decline = () => {
     if (decided.current) return
@@ -52,9 +57,9 @@ export default function Request() {
       {/* Статична карта: пунктир driverStart→pickup, «я» + ромб подачі. */}
       <LiveMap
         role="rider"
-        start={PLACES.driverStart}
-        pickup={PLACES.pickup}
-        car={{ coord: PLACES.driverStart, heading: 0 }}
+        start={state.driverStartCoord}
+        pickup={state.pickupCoord}
+        car={{ coord: state.driverStartCoord, heading: 0 }}
       />
 
       <div className="float-top">
@@ -100,8 +105,8 @@ export default function Request() {
           </div>
           {r?.phone && <div className="tag">☎ {r.phone}</div>}
 
-          <Row tag="ПОДАЧА" v={`${state.from} · 1.2 km · 4 min`} />
-          <Row tag="КУДИ" v={`${state.to} · 34 km`} />
+          <Row tag="ПОДАЧА" v={`${state.from} · ${pickupKm} km · ${pickupMin} min`} />
+          <Row tag="КУДИ" v={`${state.to} · ${tripKm} km`} />
 
           <div className="chips">
             <Chip on>[x] silent</Chip>

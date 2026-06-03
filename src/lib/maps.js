@@ -73,6 +73,13 @@ export function pointAt(coords, cum, d) {
 // Центр Києва — для зміщення підказок геокодера.
 export const KYIV_CENTER = [30.5234, 50.4501]
 
+// Точка старту водія неподалік від точки подачі (≈1.5 км на пн.-зх.).
+// У проді сюди підставляється реальна позиція найближчого онлайн-водія.
+export function nearbyStart(coord) {
+  if (!coord) return PLACES.driverStart
+  return [coord[0] - 0.013, coord[1] + 0.009]
+}
+
 // Геокодер Photon (OpenStreetMap) — безкоштовний, без ключа, зручний для
 // автодоповнення. У проді → Google Places / Mapbox Geocoding (та сама сигнатура).
 const GEOCODER = 'https://photon.komoot.io'

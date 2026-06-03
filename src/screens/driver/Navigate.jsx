@@ -29,8 +29,8 @@ export default function Navigate() {
     <div className="screen">
       <LiveMap
         role="driver"
-        start={PLACES.driverStart}
-        pickup={PLACES.pickup}
+        start={state.driverStartCoord}
+        pickup={state.pickupCoord}
         durationMs={16000}
         onProgress={onProgress}
       />

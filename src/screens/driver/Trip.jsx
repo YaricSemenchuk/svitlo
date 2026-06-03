@@ -27,8 +27,8 @@ export default function DriverTrip() {
     <div className="screen">
       <LiveMap
         role="driver"
-        start={PLACES.pickup}
-        pickup={PLACES.dest}
+        start={state.pickupCoord}
+        pickup={state.destCoord}
         durationMs={26000}
         onProgress={onProgress}
       />
