@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTrip } from '../../state/TripContext'
 import { useDriverTracking } from '../../lib/useDriverTracking'
@@ -15,11 +15,23 @@ function banner(p, km) {
 
 export default function Navigate() {
   const nav = useNavigate()
-  const { state } = useTrip()
+  const { state, realtime } = useTrip()
   const { permission, speed } = useDriverTracking({ enabled: true })
   const [info, setInfo] = useState({ p: 0, km: 1.2 })
+  const [atPlace, setAtPlace] = useState(false)
 
   const onProgress = (p, i) => setInfo({ p, km: i.km })
+
+  // «Я на місці» → повідомляємо замовника. Чекаємо, поки він почне поїздку.
+  const arrive = () => {
+    realtime.emit('ride:status', { status: 'arrived' })
+    setAtPlace(true)
+  }
+
+  // Пасажир підтвердив посадку (ride:start → status 'in_trip') → у дорогу.
+  useEffect(() => {
+    if (state.status === 'in_trip') nav('/driver/trip')
+  }, [state.status, nav])
 
   const km = info.km
   const mins = Math.max(1, Math.round(km * 3))
@@ -51,15 +63,24 @@ export default function Navigate() {
         <Sheet>
           <BarHead left="NAVIGATE → PICKUP" right={`${speed || 38} km/h`} />
           <div className="driver-card">
-            <Avatar label={state.rider?.initials || 'ЯС'} kind="rider" />
+            <Avatar label={state.rider?.initials || 'ПС'} kind="rider" />
             <div className="dc-main">
-              <div className="dc-name">{state.rider?.name || 'Яр. С.'}</div>
-              <div className="dc-sub">★ {state.rider?.rating ?? 4.9} · вул. Хрещатик, 22</div>
+              <div className="dc-name">{state.rider?.name || 'Пасажир'}</div>
+              <div className="dc-sub">★ {state.rider?.rating ?? 5} · {state.from}</div>
             </div>
           </div>
-          <Btn variant="primary" onClick={() => nav('/driver/trip')}>
-            Я НА МІСЦІ
-          </Btn>
+          {atPlace ? (
+            <>
+              <div className="tag lime">// очікуємо, поки пасажир сяде…</div>
+              <Btn variant="ghost" disabled>
+                Очікування пасажира
+              </Btn>
+            </>
+          ) : (
+            <Btn variant="primary" onClick={arrive}>
+              Я НА МІСЦІ
+            </Btn>
+          )}
         </Sheet>
       </div>
     </div>

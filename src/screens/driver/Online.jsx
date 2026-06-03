@@ -18,8 +18,9 @@ export default function Online() {
   const toggle = () => {
     const next = !accepting
     setAccepting(next)
-    if (next) realtime.emit('driver:online', { riderProfile: state.profiles.rider })
-    else realtime.emit('ride:cancel')
+    // Виходимо в мережу як реальний водій — сервер слатиме нам запити.
+    if (next) realtime.emit('driver:online', { profile: state.profiles.driver })
+    else realtime.emit('driver:offline')
   }
 
   const endShift = () => {

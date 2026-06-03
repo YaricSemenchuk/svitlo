@@ -28,6 +28,8 @@ export default function EnRoute() {
   }
 
   const startTrip = () => {
+    // Пасажир вийшов і сів → повідомляємо водія почати рух за маршрутом.
+    realtime.emit('ride:start')
     dispatch({ type: 'START_TRIP' })
     nav('/rider/trip')
   }

@@ -25,6 +25,8 @@ export default function LiveMap({
   const markersRef = useRef({})
   const rafRef = useRef(null)
   const routeRef = useRef(null) // { coords, cum }
+  const roRef = useRef(null)
+  const resizeTimersRef = useRef([])
   const onProgressRef = useRef(onProgress)
   onProgressRef.current = onProgress
 
@@ -40,8 +42,18 @@ export default function LiveMap({
     })
     mapRef.current = map
 
+    // На мобільних канвас іноді ініціалізується до фінальної розкладки →
+    // карта порожня (чорна). Примусовий resize після монтування + спостерігач.
+    const ro = new ResizeObserver(() => map.resize())
+    ro.observe(containerRef.current)
+    roRef.current = ro
+    const t1 = setTimeout(() => map.resize(), 100)
+    const t2 = setTimeout(() => map.resize(), 600)
+    resizeTimersRef.current = [t1, t2]
+
     map.on('load', () => {
       loadedRef.current = true
+      map.resize()
 
       // Активний маршрут (лаймова лінія).
       map.addSource('route', {
@@ -90,6 +102,8 @@ export default function LiveMap({
 
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
+      resizeTimersRef.current.forEach(clearTimeout)
+      if (roRef.current) roRef.current.disconnect()
       map.remove()
       mapRef.current = null
       loadedRef.current = false

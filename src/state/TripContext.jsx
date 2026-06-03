@@ -39,6 +39,9 @@ const initialState = {
   ref: null, // атрибуція водія з ?ref=
   profiles: { rider: null, driver: null }, // зареєстровані профілі
   auth: { phone: null, loggedIn: false }, // сесія користувача
+  rideId: null, // id активної поїздки (WebSocket)
+  driversOnline: 0, // скільки водіїв онлайн на момент замовлення
+  rideTaken: false, // водій не встиг прийняти (поїздку взяв інший)
 }
 
 function reducer(state, action) {
@@ -103,12 +106,38 @@ function reducer(state, action) {
         fare: action.fare ?? state.fare,
         offers: [],
         driver: null,
+        rideTaken: false,
         pickupCoord,
         destCoord,
         driverStartCoord,
         carCoord: driverStartCoord,
       }
     }
+
+    case 'SET_RIDE_META':
+      return { ...state, rideId: action.rideId, driversOnline: action.driversOnline ?? 0 }
+
+    case 'ASSIGNED':
+      // Водій отримав поїздку: координати маршруту + дані замовника.
+      return {
+        ...state,
+        status: 'arriving',
+        rideId: action.rideId,
+        rider: action.rider || state.rider,
+        from: action.from || state.from,
+        to: action.to || state.to,
+        fare: action.fare ?? state.fare,
+        pickupCoord: action.pickupCoord || PLACES.pickup,
+        destCoord: action.destCoord || PLACES.dest,
+        driverStartCoord: action.driverStartCoord || PLACES.driverStart,
+        carCoord: action.driverStartCoord || PLACES.driverStart,
+      }
+
+    case 'TRIP_STARTED':
+      return { ...state, status: 'in_trip' }
+
+    case 'RIDE_TAKEN':
+      return { ...state, rideTaken: true, status: 'idle' }
 
     case 'RECEIVE_OFFER':
       return { ...state, offers: [...state.offers, action.offer] }
@@ -147,6 +176,8 @@ function reducer(state, action) {
       return {
         ...state,
         status: 'requesting',
+        rideId: action.rideId || state.rideId,
+        rideTaken: false,
         rider: action.rider,
         fare: action.fare ?? state.fare,
         // Адреси з пропозиції пасажира (фолбек — демо-маршрут).
@@ -213,17 +244,47 @@ export function TripProvider({ children }) {
   useEffect(() => {
     realtime.connect()
     const offs = [
-      realtime.on('ride:offer', (p) => dispatch({ type: 'RECEIVE_OFFER', offer: p.driver })),
+      // Замовник створив поїздку.
+      realtime.on('ride:created', (p) =>
+        dispatch({ type: 'SET_RIDE_META', rideId: p.rideId, driversOnline: p.driversOnline })
+      ),
+      // Замовнику: водія знайдено.
       realtime.on('ride:matched', (p) => dispatch({ type: 'MATCHED', driver: p.driver })),
+      // Водію: поїздку призначено.
+      realtime.on('ride:assigned', (p) =>
+        dispatch({
+          type: 'ASSIGNED',
+          rideId: p.rideId,
+          rider: p.rider,
+          from: p.fromLabel,
+          to: p.toLabel,
+          fare: p.fare,
+          pickupCoord: p.pickup,
+          destCoord: p.dest,
+          driverStartCoord: p.driverStart,
+        })
+      ),
+      // Водій не встиг — поїздку взяв інший.
+      realtime.on('ride:taken', () => dispatch({ type: 'RIDE_TAKEN' })),
+      // Позиція водія → замовнику.
       realtime.on('driver:location', (p) =>
         dispatch({ type: 'CAR_LOCATION', coord: p.coord, heading: p.heading })
       ),
+      // Водій прибув.
       realtime.on('ride:status', (p) => {
         if (p.status === 'arrived') dispatch({ type: 'ARRIVED' })
       }),
+      // Пасажир підтвердив посадку → водію почати рух.
+      realtime.on('ride:start', () => dispatch({ type: 'TRIP_STARTED' })),
+      // Поїздку завершено.
+      realtime.on('ride:complete', () => dispatch({ type: 'COMPLETE' })),
+      // Інша сторона скасувала.
+      realtime.on('ride:cancel', () => dispatch({ type: 'RESET' })),
+      // Водію: вхідний запит.
       realtime.on('ride:request', (p) =>
         dispatch({
           type: 'RECEIVE_REQUEST',
+          rideId: p.rideId,
           rider: p.rider,
           fare: p.fare,
           from: p.fromLabel,

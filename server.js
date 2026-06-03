@@ -5,6 +5,8 @@ import pg from 'pg'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import path from 'path'
+import http from 'http'
+import { WebSocketServer } from 'ws'
 import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -124,10 +126,175 @@ const dist = path.join(__dirname, 'dist')
 app.use(express.static(dist))
 app.get('*', (req, res) => res.sendFile(path.join(dist, 'index.html')))
 
+// ─────────────────────────── WebSocket: реальний звʼязок ───────────────────────────
+// Звʼязує замовника й водія в одній поїздці. Модель: перший водій, що прийняв,
+// отримує замовлення. Далі — стрім координат водія до замовника та синхронізація
+// статусів (прибув → пасажир «почати» → у дорозі → завершено).
+const server = http.createServer(app)
+const wss = new WebSocketServer({ server, path: '/ws' })
+
+const online = new Map() // ws(водій) -> { profile, coord }
+const rides = new Map() // rideId -> { id, passenger, riderProfile, ...coords, fare, status, driver, driverProfile }
+let rideSeq = 1
+
+const send = (ws, event, payload) => {
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify({ event, payload }))
+}
+
+wss.on('connection', (ws, req) => {
+  try {
+    const token = new URL(req.url, 'http://x').searchParams.get('token')
+    const u = jwt.verify(token, JWT_SECRET)
+    ws.userId = u.id
+    ws.phone = u.phone
+  } catch {
+    ws.close(4001, 'auth')
+    return
+  }
+
+  ws.on('message', (raw) => {
+    let msg
+    try {
+      msg = JSON.parse(raw)
+    } catch {
+      return
+    }
+    handleWs(ws, msg.event, msg.payload || {})
+  })
+
+  ws.on('close', () => {
+    online.delete(ws)
+    for (const ride of rides.values()) {
+      if (ride.driver === ws) send(ride.passenger, 'ride:cancel', { rideId: ride.id, by: 'driver' })
+      else if (ride.passenger === ws) {
+        if (ride.driver) send(ride.driver, 'ride:cancel', { rideId: ride.id, by: 'rider' })
+        rides.delete(ride.id)
+      }
+    }
+  })
+})
+
+function handleWs(ws, event, p) {
+  switch (event) {
+    case 'driver:online':
+      ws.role = 'driver'
+      online.set(ws, { profile: p.profile, coord: p.coord })
+      break
+
+    case 'driver:offline':
+      online.delete(ws)
+      break
+
+    case 'ride:create': {
+      const id = 'r' + rideSeq++
+      const ride = {
+        id,
+        passenger: ws,
+        riderProfile: p.profile,
+        from: p.from,
+        to: p.to,
+        pickupCoord: p.pickupCoord,
+        destCoord: p.destCoord,
+        driverStartCoord: p.driverStartCoord,
+        fare: p.fare,
+        status: 'searching',
+        driver: null,
+        driverProfile: null,
+      }
+      rides.set(id, ride)
+      ws.rideId = id
+      send(ws, 'ride:created', { rideId: id, driversOnline: online.size })
+      // Розсилаємо запит усім онлайн-водіям.
+      for (const dws of online.keys()) {
+        send(dws, 'ride:request', {
+          rideId: id,
+          rider: p.profile || { name: 'Пасажир' },
+          fare: p.fare,
+          fromLabel: p.from,
+          toLabel: p.to,
+          pickup: p.pickupCoord,
+          dest: p.destCoord,
+          driverStart: p.driverStartCoord,
+        })
+      }
+      break
+    }
+
+    case 'ride:accept': {
+      // Перший водій, що прийняв, отримує поїздку.
+      const ride = rides.get(p.rideId)
+      if (!ride || ride.driver) {
+        send(ws, 'ride:taken', { rideId: p.rideId })
+        return
+      }
+      ride.driver = ws
+      ride.driverProfile = p.profile || online.get(ws)?.profile || { name: 'Водій' }
+      ride.status = 'assigned'
+      ws.rideId = ride.id
+      send(ride.passenger, 'ride:matched', { rideId: ride.id, driver: ride.driverProfile })
+      send(ws, 'ride:assigned', {
+        rideId: ride.id,
+        rider: ride.riderProfile,
+        fromLabel: ride.from,
+        toLabel: ride.to,
+        pickup: ride.pickupCoord,
+        dest: ride.destCoord,
+        driverStart: ride.driverStartCoord,
+        fare: ride.fare,
+      })
+      for (const dws of online.keys()) if (dws !== ws) send(dws, 'ride:taken', { rideId: ride.id })
+      break
+    }
+
+    case 'driver:location': {
+      const ride = rides.get(p.rideId || ws.rideId)
+      if (ride) send(ride.passenger, 'driver:location', { coord: p.coord, heading: p.heading })
+      break
+    }
+
+    case 'ride:status': {
+      const ride = rides.get(p.rideId || ws.rideId)
+      if (ride) {
+        ride.status = p.status
+        send(ride.passenger, 'ride:status', { status: p.status })
+      }
+      break
+    }
+
+    case 'ride:start': {
+      // Пасажир вийшов і підтвердив → водій починає рух за маршрутом замовлення.
+      const ride = rides.get(p.rideId || ws.rideId)
+      if (ride && ride.driver) {
+        ride.status = 'in_trip'
+        send(ride.driver, 'ride:start', { rideId: ride.id })
+      }
+      break
+    }
+
+    case 'ride:complete': {
+      const ride = rides.get(p.rideId || ws.rideId)
+      if (ride) {
+        send(ride.passenger, 'ride:complete', { rideId: ride.id })
+        rides.delete(ride.id)
+      }
+      break
+    }
+
+    case 'ride:cancel': {
+      const ride = rides.get(p.rideId || ws.rideId)
+      if (ride) {
+        const other = ws === ride.passenger ? ride.driver : ride.passenger
+        send(other, 'ride:cancel', { rideId: ride.id })
+        rides.delete(ride.id)
+      }
+      break
+    }
+  }
+}
+
 initDb()
-  .then(() => app.listen(PORT, () => console.log('Svitlo on :' + PORT)))
+  .then(() => server.listen(PORT, () => console.log('Svitlo on :' + PORT)))
   .catch((e) => {
     console.error('DB init failed:', e)
-    // Піднімаємо сервер усе одно — фронт працюватиме, API віддаватиме 500.
-    app.listen(PORT, () => console.log('Svitlo on :' + PORT + ' (no DB)'))
+    server.listen(PORT, () => console.log('Svitlo on :' + PORT + ' (no DB)'))
   })

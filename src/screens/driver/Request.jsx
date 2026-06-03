@@ -11,6 +11,7 @@ export default function Request() {
   const { state, realtime, dispatch } = useTrip()
   const r = state.rider
   const [left, setLeft] = useState(12)
+  const [waiting, setWaiting] = useState(false)
   const decided = useRef(false)
 
   // Реальні дистанції з координат маршруту.
@@ -21,7 +22,6 @@ export default function Request() {
   const decline = () => {
     if (decided.current) return
     decided.current = true
-    realtime.emit('ride:cancel')
     dispatch({ type: 'RESET' })
     nav('/driver/online')
   }
@@ -29,13 +29,21 @@ export default function Request() {
   const accept = () => {
     if (decided.current) return
     decided.current = true
-    dispatch({ type: 'ACCEPT_REQUEST' })
-    realtime.emit('ride:accept')
-    nav('/driver/navigate')
+    // Надсилаємо згоду. Чекаємо підтвердження сервера (ride:assigned),
+    // бо поїздку міг прийняти інший водій раніше.
+    realtime.emit('ride:accept', { rideId: state.rideId, profile: state.profiles.driver })
+    setWaiting(true)
   }
 
-  // Таймер прийняття.
+  // Підтвердження від сервера: призначено → навігація; взяв інший → назад онлайн.
   useEffect(() => {
+    if (state.status === 'arriving') nav('/driver/navigate')
+    else if (state.rideTaken) nav('/driver/online')
+  }, [state.status, state.rideTaken, nav])
+
+  // Таймер прийняття (поки не натиснув «прийняти»).
+  useEffect(() => {
+    if (waiting) return
     const id = setInterval(() => {
       setLeft((x) => {
         if (x <= 1) {
@@ -48,7 +56,7 @@ export default function Request() {
     }, 1000)
     return () => clearInterval(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [waiting])
 
   const fare = state.fare || 210
 
@@ -114,12 +122,13 @@ export default function Request() {
             <Chip>Комфорт</Chip>
           </div>
 
+          {waiting && <div className="tag lime">// очікуємо підтвердження…</div>}
           <div className="row" style={{ gap: 8 }}>
-            <Btn variant="ghost" onClick={decline}>
+            <Btn variant="ghost" onClick={decline} disabled={waiting}>
               Відхилити
             </Btn>
-            <Btn variant="primary" onClick={accept}>
-              ✓ Прийняти · {fare} ₴
+            <Btn variant="primary" onClick={accept} disabled={waiting}>
+              {waiting ? 'Прийнято ✓' : `✓ Прийняти · ${fare} ₴`}
             </Btn>
           </div>
         </div>

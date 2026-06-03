@@ -106,24 +106,17 @@ export default function Order() {
     const destCoord = state.toCoord || PLACES.dest
     const driverStartCoord = nearbyStart(pickupCoord)
 
-    // Кандидати-водії — ЛИШЕ реальні (зареєстрований/онлайн на цьому пристрої).
-    // Жодних вигаданих. Немає водія — пасажир побачить «немає вільних поблизу».
-    const drivers = state.profiles.driver
-      ? [{ ...state.profiles.driver, startCoord: driverStartCoord }]
-      : []
-
     dispatch({ type: 'SET_FARE', fare: finalFare })
     dispatch({ type: 'CREATE_RIDE', fare: finalFare, pickupCoord, destCoord, driverStartCoord })
+    // Реальний WebSocket: запит іде всім онлайн-водіям; перший, хто прийме, везе.
     realtime.emit('ride:create', {
       from: state.from,
       to: state.to,
-      fromCoord: state.fromCoord,
-      toCoord: state.toCoord,
       pickupCoord,
       destCoord,
       driverStartCoord,
       fare: finalFare,
-      drivers,
+      profile: state.profiles.rider,
     })
     nav('/rider/matching')
   }

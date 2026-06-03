@@ -6,8 +6,18 @@ import { VitePWA } from 'vite-plugin-pwa'
 export default defineConfig({
   // Локальна розробка/прев'ю: проксі API на бекенд-сервер (node server.js).
   // У проді цей самий сервер роздає і фронт, і /api — проксі не використовується.
-  server: { proxy: { '/api': 'http://localhost:4321' } },
-  preview: { proxy: { '/api': 'http://localhost:4321' } },
+  server: {
+    proxy: {
+      '/api': 'http://localhost:4321',
+      '/ws': { target: 'ws://localhost:4321', ws: true },
+    },
+  },
+  preview: {
+    proxy: {
+      '/api': 'http://localhost:4321',
+      '/ws': { target: 'ws://localhost:4321', ws: true },
+    },
+  },
   plugins: [
     react(),
     VitePWA({
