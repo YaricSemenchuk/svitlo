@@ -10,11 +10,15 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "serve -s dist -l ${PORT:-3000}"
+    "start": "node server.js",
+    "server:dev": "node server.js"
   },
   "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.468.0",
-    "serve": "^14.2.4",
+    "pg": "^8.13.1",
     "maplibre-gl": "^4.7.1",
     "qrcode.react": "^4.2.0",
     "react": "^18.3.1",

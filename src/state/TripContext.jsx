@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useReducer, useRef } from 'react'
 import { createRealtime } from '../lib/realtime'
 import { PLACES } from '../lib/maps'
+import { apiMe, getToken, setToken } from '../lib/api'
 
 const TripContext = createContext(null)
 
@@ -37,6 +38,7 @@ const initialState = {
   carHeading: 0,
   ref: null, // атрибуція водія з ?ref=
   profiles: { rider: null, driver: null }, // зареєстровані профілі
+  auth: { phone: null, loggedIn: false }, // сесія користувача
 }
 
 function reducer(state, action) {
@@ -46,6 +48,21 @@ function reducer(state, action) {
 
     case 'SET_REF':
       return { ...state, ref: action.ref }
+
+    case 'SET_SESSION':
+      // Логін/реєстрація: профілі + телефон із сервера.
+      return {
+        ...state,
+        profiles: action.profiles || { rider: null, driver: null },
+        auth: { phone: action.phone || null, loggedIn: true },
+      }
+
+    case 'LOGOUT':
+      return {
+        ...state,
+        profiles: { rider: null, driver: null },
+        auth: { phone: null, loggedIn: false },
+      }
 
     case 'SET_PROFILE':
       return {
@@ -154,6 +171,7 @@ function reducer(state, action) {
         prefs: state.prefs,
         fare: state.fare,
         profiles: state.profiles, // профілі не скидаємо
+        auth: state.auth, // сесію не скидаємо
       }
 
     default:
@@ -171,7 +189,7 @@ export function TripProvider({ children }) {
   if (!rtRef.current) rtRef.current = createRealtime()
   const realtime = rtRef.current
 
-  // Зберігаємо профілі в localStorage при змінах.
+  // Зберігаємо профілі в localStorage (кеш на випадок офлайну).
   useEffect(() => {
     try {
       localStorage.setItem(PROFILES_KEY, JSON.stringify(state.profiles))
@@ -179,6 +197,17 @@ export function TripProvider({ children }) {
       /* ignore */
     }
   }, [state.profiles])
+
+  // На старті, якщо є токен — підтягуємо профілі з сервера (джерело правди).
+  useEffect(() => {
+    const token = getToken()
+    if (!token) return
+    apiMe(token)
+      .then(({ user }) =>
+        dispatch({ type: 'SET_SESSION', phone: user.phone, profiles: user.profiles })
+      )
+      .catch(() => setToken(null)) // токен протух — виходимо
+  }, [])
 
   // Мапимо realtime-події в dispatch. Це єдиний місток між сервером і UI.
   useEffect(() => {

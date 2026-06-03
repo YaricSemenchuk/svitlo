@@ -4,6 +4,10 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
 export default defineConfig({
+  // Локальна розробка/прев'ю: проксі API на бекенд-сервер (node server.js).
+  // У проді цей самий сервер роздає і фронт, і /api — проксі не використовується.
+  server: { proxy: { '/api': 'http://localhost:4321' } },
+  preview: { proxy: { '/api': 'http://localhost:4321' } },
   plugins: [
     react(),
     VitePWA({

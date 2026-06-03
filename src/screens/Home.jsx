@@ -1,12 +1,13 @@
 import { useNavigate } from 'react-router-dom'
-import { User, Car, Pencil } from 'lucide-react'
+import { User, Car, Pencil, LogOut, LogIn } from 'lucide-react'
 import { useTrip } from '../state/TripContext'
+import { setToken } from '../lib/api'
 import InstallQR from '../components/InstallQR'
 
 export default function Home() {
   const nav = useNavigate()
   const { state, dispatch } = useTrip()
-  const { profiles } = state
+  const { profiles, auth } = state
 
   // Вибір ролі: якщо немає профілю — спершу реєстрація.
   const go = (role) => {
@@ -21,6 +22,11 @@ export default function Home() {
     nav(`/register/${role}`)
   }
 
+  const logout = () => {
+    setToken(null)
+    dispatch({ type: 'LOGOUT' })
+  }
+
   return (
     <div className="home">
       <div className="brand">
@@ -29,7 +35,21 @@ export default function Home() {
           <h1>Svitlo</h1>
           <div className="sub">таксі · київ · ₴</div>
         </div>
+        <div style={{ flex: 1 }} />
+        {auth.loggedIn ? (
+          <button className="back" onClick={logout} aria-label="вийти" title="Вийти">
+            <LogOut size={18} />
+          </button>
+        ) : (
+          <button className="back" onClick={() => nav('/login')} aria-label="увійти" title="Вхід">
+            <LogIn size={18} />
+          </button>
+        )}
       </div>
+
+      {auth.loggedIn && (
+        <div className="tag">● {auth.phone}</div>
+      )}
 
       <div style={{ display: 'flex', gap: 12 }}>
         <button className="role-btn rider" onClick={() => go('rider')}>

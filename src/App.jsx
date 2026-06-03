@@ -4,6 +4,7 @@ import { TripProvider, useTrip } from './state/TripContext'
 
 import Home from './screens/Home'
 import Register from './screens/Register'
+import Login from './screens/Login'
 import Order from './screens/rider/Order'
 import Matching from './screens/rider/Matching'
 import EnRoute from './screens/rider/EnRoute'
@@ -34,6 +35,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Home />} />
 
+            <Route path="/login" element={<Login />} />
             <Route path="/register/rider" element={<Register role="rider" />} />
             <Route path="/register/driver" element={<Register role="driver" />} />
 
