@@ -21,8 +21,8 @@ const initialState = {
   status: 'idle',
   from: 'вул. Хрещатик, 22',
   to: 'Аеропорт «Бориспіль»',
-  fromCoord: null, // [lng,lat] обраної адреси подачі
-  toCoord: null, // [lng,lat] обраної адреси призначення
+  fromCoord: PLACES.pickup, // [lng,lat] обраної адреси подачі (демо-дефолт)
+  toCoord: PLACES.dest, // [lng,lat] обраної адреси призначення (демо-дефолт)
   // Резолвлені координати поточної поїздки (з обраних адрес або демо-фолбек):
   pickupCoord: PLACES.pickup,
   destCoord: PLACES.dest,

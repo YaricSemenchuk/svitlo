@@ -1,15 +1,25 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Minus, Plus } from 'lucide-react'
 import { useTrip } from '../../state/TripContext'
 import LiveMap from '../../components/LiveMap'
 import AddressField from '../../components/AddressField'
-import { PLACES, KYIV_CENTER, reverseGeocode, nearbyStart } from '../../lib/maps'
+import { PLACES, KYIV_CENTER, reverseGeocode, nearbyStart, fetchRouteInfo } from '../../lib/maps'
 import { TopBar, Sheet, BarHead, Metric, Metrics, Chip, Btn } from '../../components/ui'
 
-const RECOMMENDED = 248 // рекомендована ціна — орієнтир для підказки
 const MIN_FARE = 60
 const STEP = 10
+
+// Рекомендована ціна за дистанцією: база + за км (калібровано під ринок Києва).
+const recommendFor = (km) => Math.max(MIN_FARE, Math.round((40 + km * 6) / 5) * 5)
+
+// Короткий лейбл способу оплати для метрики PAY.
+const PAY_SHORT = {
+  'Apple Pay': 'A·PAY',
+  'Google Pay': 'G·PAY',
+  'Картка (Mono)': 'КАРТКА',
+  Готівка: 'ГОТІВКА',
+}
 
 export default function Order() {
   const nav = useNavigate()
@@ -42,9 +52,40 @@ export default function Order() {
   // Зміщення підказок ближче до точки подачі (або центр Києва).
   const near = state.fromCoord || KYIV_CENTER
 
-  // Рекомендована ціна — орієнтир. Пасажир пропонує свою.
-  const base = RECOMMENDED
+  // Метрики маршруту (DIST/TIME) рахуються по дорогах за обраними координатами
+  // і оновлюються щоразу, коли пасажир змінює адресу.
+  const [route, setRoute] = useState(null) // { km, min } | null
+  const lastKey = useRef(null)
+  useEffect(() => {
+    const a = state.fromCoord
+    const b = state.toCoord
+    if (!a || !b) {
+      setRoute(null)
+      return
+    }
+    const key = a.join(',') + '|' + b.join(',')
+    if (key === lastKey.current) return
+    lastKey.current = key
+    let alive = true
+    fetchRouteInfo(a, b).then((info) => {
+      if (!alive) return
+      setRoute(info)
+      // Рекомендована ціна підлаштовується під новий маршрут.
+      dispatch({ type: 'SET_FARE', fare: recommendFor(info.km) })
+    })
+    return () => {
+      alive = false
+    }
+  }, [state.fromCoord, state.toCoord, dispatch])
+
+  // Рекомендована ціна — за реальною дистанцією (або фолбек).
+  const base = route ? recommendFor(route.km) : 248
   const fare = state.fare || 0
+
+  // Скільки реальних водіїв доступно (зареєстрований/онлайн на пристрої).
+  const driversNearby = state.profiles.driver ? 1 : 0
+  const payLabel = PAY_SHORT[state.profiles.rider?.pay] || 'A·PAY'
+  const fromShort = (state.from || 'KYIV').split(',')[0].trim().toUpperCase().slice(0, 22)
 
   const setFare = (v) => dispatch({ type: 'SET_FARE', fare: Math.max(MIN_FARE, v) })
   const step = (d) => dispatch({ type: 'ADJUST_FARE', delta: d })
@@ -102,7 +143,10 @@ export default function Order() {
       />
 
       <div className="float-top">
-        <TopBar left="● KYIV / PECHERSK" right="6 авто поблизу" />
+        <TopBar
+          left={`● ${fromShort}`}
+          right={driversNearby ? `${driversNearby} авто поблизу` : 'немає авто поблизу'}
+        />
       </div>
 
       <div className="float-bottom">
@@ -154,9 +198,9 @@ export default function Order() {
           </div>
 
           <Metrics>
-            <Metric k="DIST" v="34.2 km" />
-            <Metric k="TIME" v="~42 min" />
-            <Metric k="PAY" v="A·PAY" />
+            <Metric k="DIST" v={route ? `${route.km.toFixed(1)} km` : '—'} />
+            <Metric k="TIME" v={route ? `~${Math.round(route.min)} min` : '—'} />
+            <Metric k="PAY" v={payLabel} />
           </Metrics>
 
           <div className="chips">

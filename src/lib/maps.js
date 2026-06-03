@@ -130,6 +130,24 @@ export async function reverseGeocode([lng, lat]) {
   }
 }
 
+// Дистанція + тривалість маршруту по дорогах (для метрик DIST/TIME).
+// Повертає { km, min }. Фолбек — пряма лінія @ ~30 км/год.
+export async function fetchRouteInfo(start, end) {
+  try {
+    const url =
+      `https://router.project-osrm.org/route/v1/driving/` +
+      `${start[0]},${start[1]};${end[0]},${end[1]}?overview=false`
+    const res = await fetch(url)
+    if (!res.ok) throw new Error('osrm ' + res.status)
+    const r = (await res.json())?.routes?.[0]
+    if (!r) throw new Error('no route')
+    return { km: r.distance / 1000, min: r.duration / 60 }
+  } catch {
+    const km = haversine(start, end) / 1000
+    return { km, min: (km / 30) * 60 }
+  }
+}
+
 // Реальний маршрут по дорогах через OSRM. Повертає масив [lng,lat].
 // У проді → Google Directions / Mapbox Directions; сигнатура та сама.
 export async function fetchRoute(start, end) {
