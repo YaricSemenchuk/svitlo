@@ -88,6 +88,8 @@ button {
   right: 12px;
   bottom: calc(var(--safe-bottom) + 12px);
   z-index: 10;
+  max-height: calc(100dvh - var(--safe-top) - 24px);
+  overflow-y: auto;
 }
 
 /* ───────────────────────── typography ───────────────────────── */
@@ -836,6 +838,97 @@ button {
 }
 .field-input::placeholder {
   color: var(--faint);
+}
+
+/* ───────────────────────── address autocomplete ───────────────────────── */
+.addr-field {
+  position: relative;
+}
+.geo-btn {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--lime);
+}
+.geo-btn:active {
+  opacity: 0.6;
+}
+.geo-btn.denied {
+  color: var(--pink);
+  border-color: var(--pink);
+}
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.suggestions {
+  margin-top: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg);
+  overflow: hidden;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.sug {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.sug:last-child {
+  border-bottom: none;
+}
+.sug:active {
+  background: var(--panel);
+}
+.sug-pin {
+  flex: 0 0 auto;
+  color: var(--lime);
+}
+.sug-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.sug-name {
+  font-size: 14px;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sug-detail {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.sug-info {
+  padding: 10px 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+}
+.geo-hint {
+  margin-top: 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--pink);
+  letter-spacing: 0.03em;
 }
 
 /* ───────────────────────── price editor ───────────────────────── */

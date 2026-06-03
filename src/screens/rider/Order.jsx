@@ -1,8 +1,10 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Minus, Plus } from 'lucide-react'
 import { useTrip } from '../../state/TripContext'
 import LiveMap from '../../components/LiveMap'
-import { PLACES } from '../../lib/maps'
+import AddressField from '../../components/AddressField'
+import { PLACES, KYIV_CENTER, reverseGeocode } from '../../lib/maps'
 import { TopBar, Sheet, BarHead, Metric, Metrics, Chip, Btn } from '../../components/ui'
 
 const RECOMMENDED = 248 // рекомендована ціна — орієнтир для підказки
@@ -12,6 +14,33 @@ const STEP = 10
 export default function Order() {
   const nav = useNavigate()
   const { state, dispatch, realtime } = useTrip()
+  const [geoState, setGeoState] = useState('idle') // idle | loading | denied
+
+  // «Моя локація»: геолокація → зворотне геокодування → поле FROM.
+  const useMyLocation = () => {
+    if (!('geolocation' in navigator)) {
+      setGeoState('denied')
+      return
+    }
+    setGeoState('loading')
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const coord = [pos.coords.longitude, pos.coords.latitude]
+        const place = await reverseGeocode(coord)
+        dispatch({
+          type: 'SET_FROM',
+          value: place?.label || 'Моя поточна локація',
+          coord,
+        })
+        setGeoState('idle')
+      },
+      () => setGeoState('denied'),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+    )
+  }
+
+  // Зміщення підказок ближче до точки подачі (або центр Києва).
+  const near = state.fromCoord || KYIV_CENTER
 
   // Рекомендована ціна — орієнтир. Пасажир пропонує свою.
   const base = RECOMMENDED
@@ -36,6 +65,8 @@ export default function Order() {
     realtime.emit('ride:create', {
       from: state.from,
       to: state.to,
+      fromCoord: state.fromCoord,
+      toCoord: state.toCoord,
       fare: finalFare,
       driverProfile: state.profiles.driver, // зареєстрований водій відгукнеться першим
     })
@@ -50,7 +81,11 @@ export default function Order() {
 
   return (
     <div className="screen">
-      <LiveMap role="rider" start={PLACES.pickup} pickup={PLACES.driverStart} />
+      <LiveMap
+        role="rider"
+        start={state.fromCoord || PLACES.pickup}
+        pickup={state.toCoord || PLACES.driverStart}
+      />
 
       <div className="float-top">
         <TopBar left="● KYIV / PECHERSK" right="6 авто поблизу" />
@@ -60,25 +95,25 @@ export default function Order() {
         <Sheet>
           <BarHead left="ORDER · NEW" right="SURGE ×1.0" />
 
-          {/* Редаговані адреси */}
-          <div className="field-row">
-            <span className="row-tag">FROM</span>
-            <input
-              className="field-input"
-              value={state.from}
-              placeholder="Звідки їдемо?"
-              onChange={(e) => dispatch({ type: 'SET_FROM', value: e.target.value })}
-            />
-          </div>
-          <div className="field-row">
-            <span className="row-tag">TO</span>
-            <input
-              className="field-input"
-              value={state.to}
-              placeholder="Куди їдемо?"
-              onChange={(e) => dispatch({ type: 'SET_TO', value: e.target.value })}
-            />
-          </div>
+          {/* Адреси: геолокація + автодоповнення */}
+          <AddressField
+            tag="FROM"
+            value={state.from}
+            placeholder="Звідки їдемо?"
+            near={near}
+            onText={(v) => dispatch({ type: 'SET_FROM', value: v })}
+            onPick={(s) => dispatch({ type: 'SET_FROM', value: s.label, coord: s.coord })}
+            geo={{ onClick: useMyLocation, state: geoState }}
+            autoGeo
+          />
+          <AddressField
+            tag="TO"
+            value={state.to}
+            placeholder="Куди їдемо?"
+            near={near}
+            onText={(v) => dispatch({ type: 'SET_TO', value: v })}
+            onPick={(s) => dispatch({ type: 'SET_TO', value: s.label, coord: s.coord })}
+          />
 
           {/* Пропозиція ціни */}
           <div className="price-editor">

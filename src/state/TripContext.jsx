@@ -21,6 +21,8 @@ const initialState = {
   status: 'idle',
   from: 'вул. Хрещатик, 22',
   to: 'Аеропорт «Бориспіль»',
+  fromCoord: null, // [lng,lat] обраної адреси подачі
+  toCoord: null, // [lng,lat] обраної адреси призначення
   rideClass: 'comfort', // economy | comfort | business
   prefs: { silent: true, baggage: false, noSmoke: true },
   fare: 248,
@@ -51,10 +53,11 @@ function reducer(state, action) {
       return { ...state, rideClass: action.rideClass, fare: action.fare }
 
     case 'SET_FROM':
-      return { ...state, from: action.value }
+      // coord передається при виборі підказки/геолокації; при ручному вводі — скидаємо.
+      return { ...state, from: action.value, fromCoord: action.coord ?? null }
 
     case 'SET_TO':
-      return { ...state, to: action.value }
+      return { ...state, to: action.value, toCoord: action.coord ?? null }
 
     case 'SET_FARE':
       return { ...state, fare: action.fare }

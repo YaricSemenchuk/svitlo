@@ -70,6 +70,59 @@ export function pointAt(coords, cum, d) {
   return { coord, heading: bearing(a, b) }
 }
 
+// Центр Києва — для зміщення підказок геокодера.
+export const KYIV_CENTER = [30.5234, 50.4501]
+
+// Геокодер Photon (OpenStreetMap) — безкоштовний, без ключа, зручний для
+// автодоповнення. У проді → Google Places / Mapbox Geocoding (та сама сигнатура).
+const GEOCODER = 'https://photon.komoot.io'
+
+function fmtPlace(p = {}) {
+  const house = [p.street, p.housenumber].filter(Boolean).join(', ')
+  const name = p.name || house || p.city || p.county || 'Невідоме місце'
+  const detail = []
+  if (house && house !== name) detail.push(house)
+  if (p.city && p.city !== name) detail.push(p.city)
+  else if (p.county && p.county !== name) detail.push(p.county)
+  const label = detail.length ? `${name}, ${detail.join(', ')}` : name
+  return { name, detail: detail.join(' · '), label }
+}
+
+// Пошук адрес для автодоповнення. near=[lng,lat] зміщує результати ближче.
+export async function searchPlaces(query, near = KYIV_CENTER) {
+  const q = (query || '').trim()
+  if (q.length < 3) return []
+  try {
+    const params = new URLSearchParams({ q, limit: '6' })
+    if (near) {
+      params.set('lat', near[1])
+      params.set('lon', near[0])
+    }
+    const res = await fetch(`${GEOCODER}/api?${params.toString()}`)
+    if (!res.ok) throw new Error('geocode ' + res.status)
+    const data = await res.json()
+    return (data.features || [])
+      .filter((f) => f?.geometry?.coordinates)
+      .map((f) => ({ coord: f.geometry.coordinates, ...fmtPlace(f.properties) }))
+  } catch {
+    return []
+  }
+}
+
+// Зворотне геокодування: [lng,lat] → адреса (для «моя локація»).
+export async function reverseGeocode([lng, lat]) {
+  try {
+    const res = await fetch(`${GEOCODER}/reverse?lon=${lng}&lat=${lat}`)
+    if (!res.ok) throw new Error('reverse ' + res.status)
+    const data = await res.json()
+    const f = data.features?.[0]
+    if (!f) return null
+    return { coord: [lng, lat], ...fmtPlace(f.properties) }
+  } catch {
+    return null
+  }
+}
+
 // Реальний маршрут по дорогах через OSRM. Повертає масив [lng,lat].
 // У проді → Google Directions / Mapbox Directions; сигнатура та сама.
 export async function fetchRoute(start, end) {
