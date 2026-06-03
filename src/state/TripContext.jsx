@@ -312,6 +312,15 @@ export function TripProvider({ children }) {
           realtime.emit('ride:resume', { rideId: s.rideId, role: s.role })
         }
       }),
+      // Токен протух/невалідний (WS закрито з 4001) — чистимо сесію й ведемо
+      // на вхід. Без цього додаток мовчки «висить»: WS не авторизований, події
+      // (ride:created/driver:online) не доходять — водія/замовника не видно.
+      realtime.on('rt:auth', () => {
+        if (!getToken()) return // анонімний — просто чекаємо входу
+        setToken(null)
+        dispatch({ type: 'LOGOUT' })
+        if (location.pathname !== '/login') location.assign('/login')
+      }),
       // Поїздку на сервері втрачено (напр. сервер перезапустився) → скидаємо.
       realtime.on('ride:gone', () => dispatch({ type: 'RESET' })),
       realtime.on('ride:resumed', () => {}),

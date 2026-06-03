@@ -62,9 +62,13 @@ export function createRealtime() {
       }
       fire(event, payload)
     }
-    ws.onclose = () => {
+    ws.onclose = (e) => {
       ws = null
-      if (!closed) setTimeout(open, 1500) // авто-реконект
+      if (closed) return
+      // 4001 = сервер відхилив токен (протух/невалідний). Сигналимо нагору,
+      // щоб залогінений користувач пішов на повторний вхід, а не «висів» мовчки.
+      if (e && e.code === 4001) fire('rt:auth')
+      setTimeout(open, 1500) // авто-реконект (підхопить свіжий токен після входу)
     }
     ws.onerror = () => ws && ws.close()
   }
